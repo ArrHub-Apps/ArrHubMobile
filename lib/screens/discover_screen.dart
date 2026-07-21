@@ -240,6 +240,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       _seedsFor(_movies, context),
                     );
                     return ListView.builder(
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewPadding.bottom,
+                      ),
                       itemCount: defs.length,
                       itemBuilder: (context, i) {
                         final (title, fetch) = defs[i];
@@ -334,6 +337,9 @@ class _SearchResultsState extends State<_SearchResults> {
         return false;
       },
       child: ListView.builder(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewPadding.bottom,
+        ),
         itemCount: data.items.length + (data.done ? 0 : 1),
         itemBuilder: (context, i) {
           if (i >= data.items.length) {

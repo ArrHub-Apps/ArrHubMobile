@@ -22,7 +22,12 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.fromLTRB(
+        0,
+        8,
+        0,
+        8 + MediaQuery.of(context).viewPadding.bottom,
+      ),
       children: const [
         _SettingsHeader(),
         _SettingsMenuTile(
@@ -170,9 +175,16 @@ class _SettingsMenuTile extends StatelessWidget {
         MaterialPageRoute(
           builder: (_) => Scaffold(
             appBar: AppBar(title: Text(pageTitle)),
-            body: ListView(
-              padding: const EdgeInsets.all(16),
-              children: cards,
+            body: Builder(
+              builder: (context) => ListView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(context).viewPadding.bottom,
+                ),
+                children: cards,
+              ),
             ),
           ),
         ),
@@ -571,11 +583,184 @@ class _AppearanceCard extends StatelessWidget {
                           : null,
                     ),
                   ),
+                _CustomAccentSwatch(
+                  isCustom: !_accents.any(
+                    (c) => c.toARGB32() == themeState.accent.toARGB32(),
+                  ),
+                  current: themeState.accent,
+                  onPicked: themeState.setAccent,
+                ),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The "custom color" swatch — mirrors the desktop's `<input type="color">`
+/// entry: a rainbow-ringed circle that opens a hue/saturation/brightness
+/// picker dialog, and shows a checkmark whenever the current accent isn't
+/// one of the fixed presets.
+class _CustomAccentSwatch extends StatelessWidget {
+  final bool isCustom;
+  final Color current;
+  final ValueChanged<Color> onPicked;
+
+  const _CustomAccentSwatch({
+    required this.isCustom,
+    required this.current,
+    required this.onPicked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () async {
+        final picked = await showDialog<Color>(
+          context: context,
+          builder: (_) => _CustomColorDialog(initial: current),
+        );
+        if (picked != null) onPicked(picked);
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const SweepGradient(
+            colors: [
+              Color(0xFFFF0000),
+              Color(0xFFFFFF00),
+              Color(0xFF00FF00),
+              Color(0xFF00FFFF),
+              Color(0xFF0000FF),
+              Color(0xFFFF00FF),
+              Color(0xFFFF0000),
+            ],
+          ),
+          border: Border.all(
+            color: isCustom ? theme.colorScheme.onSurface : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: isCustom
+            ? Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: current,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+              )
+            : const Icon(Icons.colorize, size: 18, color: Colors.white),
+      ),
+    );
+  }
+}
+
+/// Custom accent picker: hue/saturation/brightness sliders with a live
+/// preview, for choosing any color rather than just the fixed presets
+/// (parity with the desktop's native color-input picker).
+class _CustomColorDialog extends StatefulWidget {
+  final Color initial;
+  const _CustomColorDialog({required this.initial});
+
+  @override
+  State<_CustomColorDialog> createState() => _CustomColorDialogState();
+}
+
+class _CustomColorDialogState extends State<_CustomColorDialog> {
+  late HSVColor _hsv;
+
+  @override
+  void initState() {
+    super.initState();
+    _hsv = HSVColor.fromColor(widget.initial);
+  }
+
+  Color get _color => _hsv.toColor();
+
+  Widget _sliderRow(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    return Row(
+      children: [
+        SizedBox(width: 90, child: Text(label)),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Custom accent color'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              height: 56,
+              decoration: BoxDecoration(
+                color: _color,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _sliderRow(
+              'Hue',
+              _hsv.hue,
+              0,
+              360,
+              (v) => setState(() => _hsv = _hsv.withHue(v)),
+            ),
+            _sliderRow(
+              'Saturation',
+              _hsv.saturation,
+              0,
+              1,
+              (v) => setState(() => _hsv = _hsv.withSaturation(v)),
+            ),
+            _sliderRow(
+              'Brightness',
+              _hsv.value,
+              0,
+              1,
+              (v) => setState(() => _hsv = _hsv.withValue(v)),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_color),
+          child: const Text('Use color'),
+        ),
+      ],
     );
   }
 }

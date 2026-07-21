@@ -109,6 +109,9 @@ class _AddSearchScreenState extends State<AddSearchScreen> {
           }
           final libraryIds = _libraryIds;
           return ListView.builder(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewPadding.bottom,
+            ),
             itemCount: _results.length,
             itemBuilder: (context, i) {
               final item = _results[i];

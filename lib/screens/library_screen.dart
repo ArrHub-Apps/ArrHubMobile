@@ -282,8 +282,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             final ratio =
                                 cellWidth / (cellWidth * 1.5 + 40);
                             return GridView.builder(
-                              padding:
-                                  const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                              padding: EdgeInsets.fromLTRB(
+                                12,
+                                8,
+                                12,
+                                88 + MediaQuery.of(context).viewPadding.bottom,
+                              ),
                               gridDelegate:
                                   SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: columns,

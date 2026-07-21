@@ -199,7 +199,9 @@ class _QueueScreenState extends State<QueueScreen> {
                         item: item,
                         onRemove: () => _remove(sonarr, item),
                       ),
-                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 24 + MediaQuery.of(context).viewPadding.bottom,
+                    ),
                   ],
                 ),
     );

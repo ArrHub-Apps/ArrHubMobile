@@ -135,7 +135,9 @@ class _EpisodesScreenState extends State<EpisodesScreen> {
                 seasons[seasonNumber]!,
                 initiallyExpanded: index == 0,
               ),
-            const SizedBox(height: 24),
+            SizedBox(
+              height: 24 + MediaQuery.of(context).viewPadding.bottom,
+            ),
           ],
         );
       }),

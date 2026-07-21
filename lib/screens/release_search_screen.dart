@@ -128,6 +128,9 @@ class _ReleaseSearchScreenState extends State<ReleaseSearchScreen> {
             return const Center(child: Text('No releases found'));
           }
           return ListView.separated(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewPadding.bottom,
+            ),
             itemCount: _releases!.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) => _ReleaseTile(

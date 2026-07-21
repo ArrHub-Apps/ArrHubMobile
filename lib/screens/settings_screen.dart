@@ -34,6 +34,8 @@ class SettingsScreen extends StatelessWidget {
             _ServerConfigCard(type: ServerType.radarr),
             SizedBox(height: 16),
             _ServerConfigCard(type: ServerType.sonarr),
+            SizedBox(height: 16),
+            _RemoveAllServersCard(),
           ],
         ),
         _SettingsMenuTile(
@@ -971,6 +973,88 @@ class _PairDesktopCard extends StatelessWidget {
   }
 }
 
+/// "Start over" escape hatch: removes every paired server in one go, without
+/// touching unrelated settings (TMDB key, notifications, theme).
+class _RemoveAllServersCard extends StatelessWidget {
+  const _RemoveAllServersCard();
+
+  Future<void> _removeAll(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove all servers?'),
+        content: const Text(
+            'This disconnects the app from every paired server and clears their '
+            'saved URLs, API keys and remote-access details — a clean slate, as '
+            'if freshly installed. Your TMDB key and other settings are kept, '
+            'and nothing is deleted on the servers themselves.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await context.read<RadarrState>().removeConfig();
+    if (!context.mounted) return;
+    await context.read<SonarrState>().removeConfig();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('All servers removed')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final anyConfigured = context.watch<RadarrState>().isConfigured ||
+        context.watch<SonarrState>().isConfigured;
+    if (!anyConfigured) return const SizedBox.shrink();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.restart_alt, color: theme.colorScheme.error),
+                const SizedBox(width: 8),
+                Text('Start over', style: theme.textTheme.titleLarge),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Remove all paired servers at once and return to a fresh, '
+              'unpaired state. Useful before pairing with a different desktop.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+              ),
+              onPressed: () => _removeAll(context),
+              icon: const Icon(Icons.delete_sweep_outlined),
+              label: const Text('Remove all servers'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ServerConfigCard extends StatefulWidget {
   final ServerType type;
   const _ServerConfigCard({required this.type});
@@ -1001,15 +1085,18 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
     // Config loads asynchronously at startup; keep trying to seed the
     // fields (listen: true re-triggers this) until it arrives, unless the
     // user has already started typing.
-    if (!_seeded) {
-      final config = _state(context, listen: true).config;
-      if (config != null) {
-        if (_urlController.text.isEmpty && _apiKeyController.text.isEmpty) {
-          _urlController.text = config.baseUrl;
-          _apiKeyController.text = config.apiKey;
-        }
-        _seeded = true;
+    final config = _state(context, listen: true).config;
+    if (!_seeded && config != null) {
+      if (_urlController.text.isEmpty && _apiKeyController.text.isEmpty) {
+        _urlController.text = config.baseUrl;
+        _apiKeyController.text = config.apiKey;
       }
+      _seeded = true;
+    } else if (_seeded && config == null) {
+      // Config was removed (per-server Remove or "remove all") — empty the form.
+      _urlController.clear();
+      _apiKeyController.clear();
+      _seeded = false;
     }
   }
 
@@ -1060,6 +1147,42 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
         SnackBar(content: Text('$_label settings saved')),
       );
     }
+  }
+
+  Future<void> _remove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Remove $_label?'),
+        content: Text(
+            'This disconnects the app from $_label and clears its saved URL, '
+            'API key and remote-access details. Nothing is deleted on the '
+            'server itself — you can pair or re-enter the details again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _state(context).removeConfig();
+    if (!mounted) return;
+    setState(() {
+      _testResult = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$_label removed')),
+    );
   }
 
   @override
@@ -1177,6 +1300,16 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                   onPressed: _save,
                   child: const Text('Save'),
                 ),
+                if (config != null && config.isConfigured) ...[
+                  const Spacer(),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: _remove,
+                    child: const Text('Remove'),
+                  ),
+                ],
               ],
             ),
           ],

@@ -124,6 +124,26 @@ class ServiceState extends ChangeNotifier {
     }
   }
 
+  /// Disconnects this server: clears the stored ServerConfig (URL, API key,
+  /// remote URL, cert fingerprint) and the cached library, leaving unrelated
+  /// settings (TMDB key, notification prefs, theme) untouched. Nothing is
+  /// changed on the server itself.
+  Future<void> removeConfig() async {
+    await _store.clear(type);
+    _config = null;
+    _api?.dispose();
+    _api = null;
+    _library = [];
+    _queueIds = {};
+    _error = null;
+    _loading = false;
+    notifyListeners();
+    try {
+      final file = await _cacheFile();
+      if (await file.exists()) await file.delete();
+    } catch (_) {} // cache is best-effort
+  }
+
   /// Status for a library item, taking the download queue into account.
   MediaStatus statusFor(MediaItem item) {
     if (_queueIds.contains(item.id)) return MediaStatus.downloading;

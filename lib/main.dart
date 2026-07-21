@@ -66,13 +66,13 @@ void main() {
         ChangeNotifierProvider(create: (_) => TmdbState(store)..init()),
         ChangeNotifierProvider(create: (_) => ThemeState()..init()),
       ],
-      child: const MediaManagerApp(),
+      child: const ArrHubApp(),
     ),
   );
 }
 
-class MediaManagerApp extends StatelessWidget {
-  const MediaManagerApp({super.key});
+class ArrHubApp extends StatelessWidget {
+  const ArrHubApp({super.key});
 
   ThemeData _buildTheme(Color accent, Brightness brightness) {
     final isDark = brightness == Brightness.dark;
@@ -164,7 +164,7 @@ class MediaManagerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeState = context.watch<ThemeState>();
     return MaterialApp(
-      title: 'Home Media',
+      title: 'ArrHub',
       debugShowCheckedModeBanner: false,
       themeMode: themeState.mode,
       theme: _buildTheme(themeState.accent, Brightness.light),

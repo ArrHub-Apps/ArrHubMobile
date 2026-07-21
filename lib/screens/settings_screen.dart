@@ -12,6 +12,7 @@ import '../models/server_config.dart';
 import '../services/notification_service.dart';
 import '../services/settings_store.dart';
 import '../state/app_state.dart';
+import '../widgets/arrhub_logo.dart';
 import '../widgets/poster.dart';
 import 'qr_pair_screen.dart';
 
@@ -23,6 +24,7 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: const [
+        _SettingsHeader(),
         _SettingsMenuTile(
           icon: Icons.dns_outlined,
           title: 'Servers',
@@ -66,7 +68,78 @@ class SettingsScreen extends StatelessWidget {
           pageTitle: 'Storage',
           cards: [_StorageCard(), SizedBox(height: 16), _CleanupCard()],
         ),
+        _SettingsMenuTile(
+          icon: Icons.info_outline,
+          title: 'About',
+          subtitle: 'ArrHub version & credits',
+          pageTitle: 'About',
+          cards: [_AboutCard()],
+        ),
       ],
+    );
+  }
+}
+
+/// Branded header at the top of Settings — the in-app home for the ArrHub lockup,
+/// matching the desktop sidebar.
+class _SettingsHeader extends StatelessWidget {
+  const _SettingsHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ArrHubLogo(markSize: 34),
+          const SizedBox(height: 8),
+          Text(
+            'Your media server, in your pocket.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// About page content: the lockup plus a short description.
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: ArrHubMark(size: 72)),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                'ArrHub',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'The companion app for your ArrHub media server. Browse and manage your '
+              'Radarr and Sonarr libraries, discover new movies and shows, and keep an '
+              'eye on downloads — at home or away.',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

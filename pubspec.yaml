@@ -1,5 +1,5 @@
 name: media_manager
-description: "A new Flutter project."
+description: "ArrHub — manage your Radarr/Sonarr media server from your phone."
 publish_to: 'none'
 version: 0.1.0+1
 

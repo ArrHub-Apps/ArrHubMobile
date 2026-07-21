@@ -38,3 +38,6 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"
   # Monochrome layer: Android 13+ themed icons tint this with the system accent.
   adaptive_icon_monochrome: "assets/icon/icon_monochrome.png"
+  # Mark is pre-sized to the safe zone in the square source PNGs; no extra inset
+  # (the tool's 16% default would otherwise shrink it into a small island).
+  adaptive_icon_foreground_inset: 0

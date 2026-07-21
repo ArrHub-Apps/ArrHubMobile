@@ -58,17 +58,24 @@ class _QrPairScreenState extends State<QrPairScreen> {
   Future<void> _claim(String host, int port, String code) async {
     final radarrState = context.read<RadarrState>();
     final sonarrState = context.read<SonarrState>();
+    final tmdbState = context.read<TmdbState>();
     final navigator = Navigator.of(context);
     try {
       final bundle = await PairingService.claim(host, port, code);
       await radarrState.updateConfig(bundle.configFor(ServerType.radarr));
       await sonarrState.updateConfig(bundle.configFor(ServerType.sonarr));
+      // Adopt the host's shared TMDB key only if this phone hasn't set its own — never
+      // clobber a key the user entered manually.
+      final tmdbShared = bundle.tmdbApiKey.isNotEmpty && !tmdbState.isConfigured;
+      if (tmdbShared) await tmdbState.updateApiKey(bundle.tmdbApiKey);
       if (!mounted) return;
       final remote = bundle.certFingerprint.isNotEmpty;
+      final discover = tmdbShared ? ' Discover is ready too.' : '';
       navigator.pop(
-        remote
-            ? 'Paired — Radarr & Sonarr configured, with remote access for when you’re away.'
-            : 'Paired — Radarr & Sonarr configured.',
+        (remote
+                ? 'Paired — Radarr & Sonarr configured, with remote access for when you’re away.'
+                : 'Paired — Radarr & Sonarr configured.') +
+            discover,
       );
     } on PairingException catch (e) {
       _fail(e.message);

@@ -17,6 +17,10 @@ class PairingBundle {
   final String sonarrRemoteUrl;
   final String certFingerprint;
 
+  /// The host's TMDB API key, shared so this phone's Discover tab works immediately.
+  /// Empty when the host hasn't configured one.
+  final String tmdbApiKey;
+
   const PairingBundle({
     required this.radarrUrl,
     required this.radarrApiKey,
@@ -25,6 +29,7 @@ class PairingBundle {
     this.radarrRemoteUrl = '',
     this.sonarrRemoteUrl = '',
     this.certFingerprint = '',
+    this.tmdbApiKey = '',
   });
 
   factory PairingBundle.fromJson(Map<String, dynamic> json) => PairingBundle(
@@ -35,6 +40,7 @@ class PairingBundle {
         radarrRemoteUrl: json['radarrRemoteUrl'] as String? ?? '',
         sonarrRemoteUrl: json['sonarrRemoteUrl'] as String? ?? '',
         certFingerprint: json['certFingerprint'] as String? ?? '',
+        tmdbApiKey: json['tmdbApiKey'] as String? ?? '',
       );
 
   /// Builds a [ServerConfig] for the given service. The LAN URL is primary; the app

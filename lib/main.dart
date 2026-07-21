@@ -188,57 +188,50 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final radarr = context.watch<RadarrState>();
     final sonarr = context.watch<SonarrState>();
+    // Discover only appears once TMDB is set up — whether the key was entered manually in
+    // Settings or adopted from a desktop pairing. Without one it's just an empty prompt, so
+    // the whole tab is hidden until a key exists.
+    final showDiscover = context.watch<TmdbState>().isConfigured;
 
-    final pages = [
-      LibraryScreen(state: radarr),
-      LibraryScreen(state: sonarr),
-      const DiscoverScreen(),
-      const QueueScreen(),
-      const SettingsScreen(),
+    final tabs = <_TabDef>[
+      _TabDef('Movies', Icons.movie_outlined, Icons.movie, LibraryScreen(state: radarr)),
+      _TabDef('TV Shows', Icons.tv_outlined, Icons.tv, LibraryScreen(state: sonarr)),
+      if (showDiscover)
+        _TabDef('Discover', Icons.explore_outlined, Icons.explore, const DiscoverScreen()),
+      _TabDef('Queue', Icons.download_outlined, Icons.download, const QueueScreen()),
+      _TabDef('Settings', Icons.settings_outlined, Icons.settings, const SettingsScreen()),
     ];
+    // Clamp: the visible tab count changes when Discover is toggled, so a previously
+    // selected index can fall out of range.
+    final tab = _tab.clamp(0, tabs.length - 1);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(switch (_tab) {
-          0 => 'Movies',
-          1 => 'TV Shows',
-          2 => 'Discover',
-          3 => 'Queue',
-          _ => 'Settings',
-        }),
+      appBar: AppBar(title: Text(tabs[tab].title)),
+      body: IndexedStack(
+        index: tab,
+        children: [for (final t in tabs) t.page],
       ),
-      body: IndexedStack(index: _tab, children: pages),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
+        selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.movie_outlined),
-            selectedIcon: Icon(Icons.movie),
-            label: 'Movies',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.tv_outlined),
-            selectedIcon: Icon(Icons.tv),
-            label: 'TV Shows',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
-            label: 'Discover',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.download_outlined),
-            selectedIcon: Icon(Icons.download),
-            label: 'Queue',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+        destinations: [
+          for (final t in tabs)
+            NavigationDestination(
+              icon: Icon(t.icon),
+              selectedIcon: Icon(t.selectedIcon),
+              label: t.title,
+            ),
         ],
       ),
     );
   }
+}
+
+/// One bottom-navigation tab: its label, icons, and page.
+class _TabDef {
+  final String title;
+  final IconData icon;
+  final IconData selectedIcon;
+  final Widget page;
+  const _TabDef(this.title, this.icon, this.selectedIcon, this.page);
 }

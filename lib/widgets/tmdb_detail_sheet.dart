@@ -228,23 +228,33 @@ class _TmdbDetailSheetState extends State<TmdbDetailSheet> {
                           style: TextStyle(color: theme.colorScheme.error)),
                     ],
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _looking ? null : _startAdd,
-                        icon: _looking
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.add),
-                        label: Text(
-                            'Add to ${item.isMovie ? "Radarr" : "Sonarr"}'),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _looking ? null : _startAdd,
+                            icon: _looking
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.add),
+                            label: Text(
+                              'Add to ${item.isMovie ? "Radarr" : "Sonarr"}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        TrailerButton(
+                          tmdbId: item.id,
+                          isMovie: item.isMovie,
+                          compact: true,
+                        ),
+                      ],
                     ),
-                    TrailerButton(tmdbId: item.id, isMovie: item.isMovie),
                     CastRow(tmdbId: item.id, isMovie: item.isMovie),
                     SuggestedCarousel(tmdbId: item.id, isMovie: item.isMovie),
                   ],

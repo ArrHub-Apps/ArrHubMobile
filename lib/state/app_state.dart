@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +25,7 @@ class ServiceState extends ChangeNotifier {
   Set<int> _queueIds = {};
   bool _loading = false;
   String? _error;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   ServiceState(this.type, this._store);
 
@@ -35,6 +37,16 @@ class ServiceState extends ChangeNotifier {
   bool get isConfigured => _config?.isConfigured ?? false;
 
   Future<void> init() async {
+    // Wi-Fi <-> cellular (or reconnecting after a drop) may make a
+    // previously-unreachable host reachable — re-probe right away instead
+    // of waiting for the next request to fail first. Kept for the app's
+    // lifetime; _config/_api are read fresh on each event, so this also
+    // covers a remote URL added later via updateConfig.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((_) {
+      if ((_config?.hasRemote ?? false) && _api != null) {
+        unawaited(_probeAndPickHost());
+      }
+    });
     _config = await _store.load(type);
     if (isConfigured) {
       CertPinning.add(_config!.certFingerprint);
@@ -199,6 +211,7 @@ class ServiceState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _connectivitySub?.cancel();
     _api?.dispose();
     super.dispose();
   }

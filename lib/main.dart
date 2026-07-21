@@ -51,6 +51,18 @@ Future<void> configureBackgroundChecks(bool enabled) async {
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   CertPinning.install();
+  // DAN-17: mobile_scanner and workmanager (via workmanager_android) both apply
+  // the Kotlin Gradle Plugin directly, which is deprecated and will eventually
+  // fail Flutter builds — see
+  // https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers
+  // Checked upstream as of this build: mobile_scanner is pinned to the latest
+  // 7.x (7.2.0) and workmanager to the latest 0.9.0+3 (federated, backed by
+  // workmanager_android); neither's changelog documents a Built-in-Kotlin
+  // migration yet. Nothing to change in this app until one ships — re-check
+  // both changelogs periodically, and if a while passes with no movement,
+  // raise it as an issue with the plugin authors (mobile_scanner:
+  // github.com/juliansteenbakker/mobile_scanner, workmanager:
+  // github.com/fluttercommunity/flutter_workmanager).
   Workmanager().initialize(callbackDispatcher);
   final store = SettingsStore();
   // Baseline the import history on launch so we never notify for things

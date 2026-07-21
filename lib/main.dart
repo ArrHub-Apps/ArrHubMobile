@@ -1,35 +1,30 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:workmanager/workmanager.dart';
 
+import 'models/server_config.dart';
+
 import 'screens/discover_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/cert_pinning.dart';
 import 'services/notification_service.dart';
 import 'services/settings_store.dart';
 import 'state/app_state.dart';
 
-/// Debug-only: the dev PC's antivirus (AVG) re-signs HTTPS traffic, which
-/// breaks external requests (TMDB) from the emulator. Never active in
-/// release builds.
-class _DevHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (cert, host, port) => true;
-  }
-}
-
 /// WorkManager entry point — runs in a background isolate on a ~15 min
-/// cadence to check for finished downloads.
+/// cadence to check for finished downloads. The isolate has its own memory,
+/// so cert pinning + trusted fingerprints must be re-established here too.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    CertPinning.install();
+    final store = SettingsStore();
+    for (final type in ServerType.values) {
+      CertPinning.add((await store.load(type))?.certFingerprint);
+    }
     try {
       await NotificationService.checkForCompletedDownloads();
     } catch (_) {}
@@ -55,7 +50,7 @@ Future<void> configureBackgroundChecks(bool enabled) async {
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  if (kDebugMode) HttpOverrides.global = _DevHttpOverrides();
+  CertPinning.install();
   Workmanager().initialize(callbackDispatcher);
   final store = SettingsStore();
   // Baseline the import history on launch so we never notify for things

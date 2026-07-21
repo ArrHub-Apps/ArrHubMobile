@@ -13,6 +13,7 @@ import '../services/notification_service.dart';
 import '../services/settings_store.dart';
 import '../state/app_state.dart';
 import '../widgets/poster.dart';
+import 'qr_pair_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -28,6 +29,8 @@ class SettingsScreen extends StatelessWidget {
           subtitle: 'Radarr & Sonarr connections',
           pageTitle: 'Servers',
           cards: [
+            _PairDesktopCard(),
+            SizedBox(height: 16),
             _ServerConfigCard(type: ServerType.radarr),
             SizedBox(height: 16),
             _ServerConfigCard(type: ServerType.sonarr),
@@ -918,6 +921,56 @@ class _DiskRow extends StatelessWidget {
   }
 }
 
+/// One-tap pairing: scan the desktop's QR code to auto-fill both servers (and their
+/// remote address), instead of typing URLs and API keys by hand.
+class _PairDesktopCard extends StatelessWidget {
+  const _PairDesktopCard();
+
+  Future<void> _scan(BuildContext context) async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrPairScreen()),
+    );
+    if (result != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.qr_code_scanner, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('Pair with desktop', style: theme.textTheme.titleLarge),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Scan the QR code in the ArrHub desktop app (Settings → Sharing) to set up '
+              'both servers automatically. If the desktop has remote access enabled, this '
+              'also configures away-from-home access.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => _scan(context),
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan QR code'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ServerConfigCard extends StatefulWidget {
   final ServerType type;
   const _ServerConfigCard({required this.type});
@@ -967,11 +1020,15 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
     super.dispose();
   }
 
-  ServerConfig get _draft => ServerConfig(
-        type: widget.type,
-        baseUrl: _urlController.text.trim(),
-        apiKey: _apiKeyController.text.trim(),
-      );
+  // Preserves any remoteUrl/certFingerprint/activeHost from QR pairing — this form only
+  // edits the LAN URL and API key, so a plain Save must not wipe out remote access.
+  ServerConfig get _draft {
+    final existing = _state(context).config;
+    return (existing ?? ServerConfig(type: widget.type, baseUrl: '', apiKey: '')).copyWith(
+      baseUrl: _urlController.text.trim(),
+      apiKey: _apiKeyController.text.trim(),
+    );
+  }
 
   Future<void> _test() async {
     setState(() {
@@ -1007,6 +1064,7 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
 
   @override
   Widget build(BuildContext context) {
+    final config = _state(context, listen: true).config;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1023,6 +1081,27 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                 ),
                 const SizedBox(width: 8),
                 Text(_label, style: Theme.of(context).textTheme.titleLarge),
+                if (config != null && config.hasRemote) ...[
+                  const Spacer(),
+                  Tooltip(
+                    message: config.activeHost == HostChoice.remote
+                        ? 'Currently using remote access (away from home)'
+                        : 'Remote access is set up — switches automatically when away from home',
+                    child: Chip(
+                      avatar: Icon(
+                        config.activeHost == HostChoice.remote
+                            ? Icons.public
+                            : Icons.home_outlined,
+                        size: 16,
+                      ),
+                      label: Text(
+                        config.activeHost == HostChoice.remote ? 'Remote' : 'LAN',
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
@@ -1052,6 +1131,23 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                 ),
               ),
             ),
+            if (config != null && config.hasRemote) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.lock_outline,
+                      size: 14, color: Theme.of(context).colorScheme.secondary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Remote: ${config.remoteUrl}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (_testResult != null) ...[
               const SizedBox(height: 12),
               Text(

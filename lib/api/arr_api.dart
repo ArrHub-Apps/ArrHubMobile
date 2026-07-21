@@ -32,7 +32,7 @@ class ArrApi {
   String get _mediaPath => _isRadarr ? 'movie' : 'series';
 
   Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri.parse('${config.normalizedUrl}/api/v3/$path')
+      Uri.parse('${config.activeUrl}/api/v3/$path')
           .replace(queryParameters: query);
 
   Map<String, String> get _headers => {
@@ -88,13 +88,25 @@ class ArrApi {
   }
 
   MediaItem _toItem(Map<String, dynamic> json) => _isRadarr
-      ? MediaItem.movie(json, config.normalizedUrl, config.apiKey)
-      : MediaItem.series(json, config.normalizedUrl, config.apiKey);
+      ? MediaItem.movie(json, config.activeUrl, config.apiKey)
+      : MediaItem.series(json, config.activeUrl, config.apiKey);
 
   /// Verifies connectivity and credentials; returns the server version.
   Future<String> testConnection() async {
     final status = await _get('system/status') as Map<String, dynamic>;
     return status['version'] as String? ?? 'unknown';
+  }
+
+  /// Fast, quiet reachability check for the active host — true if the server answers
+  /// on system/status within [timeout]. Used to decide between LAN and remote URLs.
+  Future<bool> probe([Duration timeout = const Duration(seconds: 4)]) async {
+    try {
+      final resp =
+          await _client.get(_uri('system/status'), headers: _headers).timeout(timeout);
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<MediaItem>> getLibrary() async {
@@ -186,7 +198,7 @@ class ArrApi {
     final records = data['records'] as List<dynamic>? ?? [];
     return records
         .map((r) => QueueItem.fromJson(r as Map<String, dynamic>, _isRadarr,
-            config.normalizedUrl, config.apiKey))
+            config.activeUrl, config.apiKey))
         .toList();
   }
 

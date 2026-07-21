@@ -10,6 +10,7 @@ import '../api/arr_api.dart';
 import '../api/tmdb_api.dart';
 import '../models/media_item.dart';
 import '../models/server_config.dart';
+import '../services/cert_pinning.dart';
 import '../services/settings_store.dart';
 
 /// Per-service (Radarr or Sonarr) state: config + library cache.
@@ -36,10 +37,14 @@ class ServiceState extends ChangeNotifier {
   Future<void> init() async {
     _config = await _store.load(type);
     if (isConfigured) {
+      CertPinning.add(_config!.certFingerprint);
       _api = ArrApi(_config!);
       // Show the last-known library immediately; refresh in the background
       // so a slow server never blanks the UI.
       await _loadCache();
+      // If a remote URL exists, make sure we're pointed at a reachable host before
+      // the first fetch (e.g. we launched away from home).
+      if (_config!.hasRemote) await _probeAndPickHost();
       await refreshLibrary();
     } else {
       notifyListeners();
@@ -47,8 +52,35 @@ class ServiceState extends ChangeNotifier {
   }
 
   MediaItem _toItem(Map<String, dynamic> json) => type == ServerType.radarr
-      ? MediaItem.movie(json, _config!.normalizedUrl, _config!.apiKey)
-      : MediaItem.series(json, _config!.normalizedUrl, _config!.apiKey);
+      ? MediaItem.movie(json, _config!.activeUrl, _config!.apiKey)
+      : MediaItem.series(json, _config!.activeUrl, _config!.apiKey);
+
+  /// True if the current host doesn't answer but the other one does — in which case
+  /// this switches to it (persisting the choice) and re-maps cached poster URLs. Returns
+  /// whether a switch happened. No-op when there's no remote URL configured.
+  Future<bool> _probeAndPickHost() async {
+    final config = _config;
+    final api = _api;
+    if (config == null || api == null || !config.hasRemote) return false;
+    if (await api.probe()) return false; // current host is fine, no switch needed
+    final flipped = config.copyWith(
+      activeHost:
+          config.activeHost == HostChoice.remote ? HostChoice.lan : HostChoice.remote,
+    );
+    final flippedApi = ArrApi(flipped);
+    if (await flippedApi.probe()) {
+      _api?.dispose();
+      _api = flippedApi;
+      _config = flipped;
+      await _store.save(flipped);
+      // Poster URLs embed the base URL, so rebuild cached items against the new host.
+      _library = _library.map((m) => _toItem(m.raw)).toList();
+      notifyListeners();
+      return true;
+    }
+    flippedApi.dispose();
+    return false;
+  }
 
   Future<File> _cacheFile() async {
     final dir = await getApplicationSupportDirectory();
@@ -79,13 +111,17 @@ class ServiceState extends ChangeNotifier {
 
   Future<void> updateConfig(ServerConfig config) async {
     await _store.save(config);
+    CertPinning.add(config.certFingerprint);
     _config = config;
     _api?.dispose();
     _api = config.isConfigured ? ArrApi(config) : null;
     _library = [];
     _error = null;
     notifyListeners();
-    if (_api != null) await refreshLibrary();
+    if (_api != null) {
+      if (config.hasRemote) await _probeAndPickHost();
+      await refreshLibrary();
+    }
   }
 
   /// Status for a library item, taking the download queue into account.
@@ -107,24 +143,38 @@ class ServiceState extends ChangeNotifier {
   }
 
   Future<void> refreshLibrary() async {
-    final api = _api;
-    if (api == null) return;
+    if (_api == null) return;
     _loading = true;
     _error = null;
     notifyListeners();
     try {
-      final library = api.getLibrary();
-      // Queue failures shouldn't take down the library view.
-      final queue = api.getQueueIds().catchError((_) => <int>{});
-      _library = await library;
-      _queueIds = await queue;
-      unawaited(_saveCache());
+      await _fetchInto(_api!);
     } catch (e) {
-      _error = e.toString();
+      // A connectivity failure may mean the active host is unreachable (e.g. we just
+      // left home). If there's an alternate host, switch to it and retry once.
+      if ((_config?.hasRemote ?? false) && await _probeAndPickHost()) {
+        try {
+          await _fetchInto(_api!);
+          _error = null;
+        } catch (e2) {
+          _error = e2.toString();
+        }
+      } else {
+        _error = e.toString();
+      }
     } finally {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _fetchInto(ArrApi api) async {
+    final library = api.getLibrary();
+    // Queue failures shouldn't take down the library view.
+    final queue = api.getQueueIds().catchError((_) => <int>{});
+    _library = await library;
+    _queueIds = await queue;
+    unawaited(_saveCache());
   }
 
   @override

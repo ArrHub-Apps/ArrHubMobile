@@ -15,6 +15,7 @@ dependencies:
   flutter_local_notifications: ^22.0.1
   flutter_secure_storage: ^10.3.1
   http: ^1.6.0
+  image_picker: ^1.1.2
   mobile_scanner: ^7.2.0
   path_provider: ^2.1.6
   provider: ^6.1.5+1
@@ -33,7 +34,12 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
+  # iOS icons can't have an alpha channel — flatten the transparent source onto the
+  # same black the Android adaptive icon uses, so both platforms match (green mark on
+  # black) rather than iOS defaulting to a white background.
+  remove_alpha_ios: true
+  background_color_ios: "#000000"
   image_path: "assets/icon/icon_legacy.png"
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: "assets/icon/icon_foreground.png"

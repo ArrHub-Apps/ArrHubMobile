@@ -33,9 +33,8 @@ class TmdbItem {
   });
 
   factory TmdbItem.fromJson(Map<String, dynamic> json, bool isMovie) {
-    final dateStr = (isMovie
-            ? json['release_date']
-            : json['first_air_date']) as String? ??
+    final dateStr =
+        (isMovie ? json['release_date'] : json['first_air_date']) as String? ??
         '';
     final posterPath = json['poster_path'] as String?;
     final backdropPath = json['backdrop_path'] as String?;
@@ -58,13 +57,29 @@ class TmdbItem {
 
 /// One cast entry from TMDB's credits endpoint.
 class TmdbCastMember {
+  /// TMDB person id — lets a tapped cast member open their filmography (DAN-52).
+  final int id;
   final String name;
   final String character;
   final String? profileUrl;
 
   const TmdbCastMember({
+    required this.id,
     required this.name,
     required this.character,
+    required this.profileUrl,
+  });
+}
+
+/// A person (actor/actress) from TMDB's person search (DAN-52).
+class TmdbPerson {
+  final int id;
+  final String name;
+  final String? profileUrl;
+
+  const TmdbPerson({
+    required this.id,
+    required this.name,
     required this.profileUrl,
   });
 }
@@ -77,13 +92,12 @@ class TmdbApi {
   final http.Client _client;
 
   TmdbApi(this.apiKey, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   Future<dynamic> _get(String path, [Map<String, String>? query]) async {
-    final uri = Uri.parse('$_base/$path').replace(queryParameters: {
-      'api_key': apiKey,
-      ...?query,
-    });
+    final uri = Uri.parse(
+      '$_base/$path',
+    ).replace(queryParameters: {'api_key': apiKey, ...?query});
     final resp = await _client.get(uri).timeout(const Duration(seconds: 30));
     if (resp.statusCode == 401) {
       throw TmdbException('Invalid TMDB API key');
@@ -95,8 +109,12 @@ class TmdbApi {
   }
 
   /// Fetches one page (20 items) of a list, dropping items without artwork.
-  Future<List<TmdbItem>> _page(String path, bool isMovie, int page,
-      [Map<String, String>? query]) async {
+  Future<List<TmdbItem>> _page(
+    String path,
+    bool isMovie,
+    int page, [
+    Map<String, String>? query,
+  ]) async {
     final data =
         await _get(path, {...?query, 'page': '$page'}) as Map<String, dynamic>;
     final results = data['results'] as List<dynamic>? ?? [];
@@ -126,21 +144,25 @@ class TmdbApi {
       _page('tv/top_rated', false, page);
 
   Future<List<TmdbGenre>> genres(bool movies) async {
-    final data = await _get('genre/${movies ? "movie" : "tv"}/list')
-        as Map<String, dynamic>;
+    final data =
+        await _get('genre/${movies ? "movie" : "tv"}/list')
+            as Map<String, dynamic>;
     return (data['genres'] as List<dynamic>? ?? [])
-        .map((e) => TmdbGenre(
-              id: (e as Map<String, dynamic>)['id'] as int,
-              name: e['name'] as String,
-            ))
+        .map(
+          (e) => TmdbGenre(
+            id: (e as Map<String, dynamic>)['id'] as int,
+            name: e['name'] as String,
+          ),
+        )
         .toList();
   }
 
   /// YouTube URL of the best trailer for a title, or null if none.
   /// Prefers official trailers, then any trailer, then teasers.
   Future<String?> trailerUrl(int tmdbId, bool isMovie) async {
-    final data = await _get('${isMovie ? "movie" : "tv"}/$tmdbId/videos')
-        as Map<String, dynamic>;
+    final data =
+        await _get('${isMovie ? "movie" : "tv"}/$tmdbId/videos')
+            as Map<String, dynamic>;
     final videos = (data['results'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .where((v) => v['site'] == 'YouTube' && v['key'] != null)
@@ -160,13 +182,15 @@ class TmdbApi {
 
   /// Top-billed cast for a title, in TMDB's billing order.
   Future<List<TmdbCastMember>> cast(int tmdbId, bool isMovie) async {
-    final data = await _get('${isMovie ? "movie" : "tv"}/$tmdbId/credits')
-        as Map<String, dynamic>;
+    final data =
+        await _get('${isMovie ? "movie" : "tv"}/$tmdbId/credits')
+            as Map<String, dynamic>;
     final cast = data['cast'] as List<dynamic>? ?? [];
     return cast.take(15).map((e) {
       final m = e as Map<String, dynamic>;
       final profilePath = m['profile_path'] as String?;
       return TmdbCastMember(
+        id: m['id'] as int? ?? 0,
         name: m['name'] as String? ?? '',
         character: m['character'] as String? ?? '',
         profileUrl: profilePath == null
@@ -181,25 +205,68 @@ class TmdbApi {
   Future<List<TmdbItem>> searchTv(String query, int page) =>
       _page('search/tv', false, page, {'query': query});
 
+  /// Searches people by name (DAN-52) — drives the "search by actor/actress"
+  /// flow; picking one opens their filmography.
+  Future<List<TmdbPerson>> searchPerson(String query, int page) async {
+    final data =
+        await _get('search/person', {'query': query, 'page': '$page'})
+            as Map<String, dynamic>;
+    final results = data['results'] as List<dynamic>? ?? [];
+    return results.map((e) {
+      final p = e as Map<String, dynamic>;
+      final profilePath = p['profile_path'] as String?;
+      return TmdbPerson(
+        id: p['id'] as int,
+        name: p['name'] as String? ?? '',
+        profileUrl: profilePath == null
+            ? null
+            : 'https://image.tmdb.org/t/p/w185$profilePath',
+      );
+    }).toList();
+  }
+
+  /// A person's known movies + TV, deduped and sorted most-popular first — the
+  /// filmography shown for a person result or a tapped cast member (DAN-52).
+  Future<List<TmdbItem>> personCredits(int personId) async {
+    final data =
+        await _get('person/$personId/combined_credits') as Map<String, dynamic>;
+    final cast = data['cast'] as List<dynamic>? ?? [];
+    final seen = <String>{};
+    final rows = <({TmdbItem item, double popularity})>[];
+    for (final c in cast) {
+      final m = c as Map<String, dynamic>;
+      final mediaType = m['media_type'] as String?;
+      if (mediaType != 'movie' && mediaType != 'tv') continue;
+      final isMovie = mediaType == 'movie';
+      final item = TmdbItem.fromJson(m, isMovie);
+      if (item.posterUrl == null) continue;
+      final key = '${isMovie ? 'm' : 't'}${item.id}';
+      if (!seen.add(key)) continue;
+      rows.add((
+        item: item,
+        popularity: (m['popularity'] as num? ?? 0).toDouble(),
+      ));
+    }
+    rows.sort((a, b) => b.popularity.compareTo(a.popularity));
+    return rows.map((r) => r.item).toList();
+  }
+
   /// TMDB's "recommended because of this title" list.
-  Future<List<TmdbItem>> recommendations(
-          int tmdbId, bool isMovie, int page) =>
-      _page('${isMovie ? "movie" : "tv"}/$tmdbId/recommendations', isMovie,
-          page);
+  Future<List<TmdbItem>> recommendations(int tmdbId, bool isMovie, int page) =>
+      _page(
+        '${isMovie ? "movie" : "tv"}/$tmdbId/recommendations',
+        isMovie,
+        page,
+      );
 
   /// Popular titles within one genre; vote-count floor filters obscure
   /// entries with inflated ratings.
   Future<List<TmdbItem>> byGenre(int genreId, bool isMovie, int page) =>
-      _page(
-        'discover/${isMovie ? "movie" : "tv"}',
-        isMovie,
-        page,
-        {
-          'with_genres': '$genreId',
-          'sort_by': 'popularity.desc',
-          'vote_count.gte': '100',
-        },
-      );
+      _page('discover/${isMovie ? "movie" : "tv"}', isMovie, page, {
+        'with_genres': '$genreId',
+        'sort_by': 'popularity.desc',
+        'vote_count.gte': '100',
+      });
 
   void dispose() => _client.close();
 }

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api/tmdb_api.dart';
 import '../screens/add_search_screen.dart' show AddSheet;
+import '../screens/person_screen.dart';
 import '../state/app_state.dart';
 import 'poster.dart' show SheetBackdropHeader;
 
@@ -32,13 +33,12 @@ class _TrailerButtonState extends State<TrailerButton> {
 
   Future<void> _open(String url) async {
     try {
-      await launchUrl(Uri.parse(url),
-          mode: LaunchMode.externalApplication);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open trailer')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open trailer')));
       }
     }
   }
@@ -224,8 +224,10 @@ class _TmdbDetailSheetState extends State<TmdbDetailSheet> {
                   children: [
                     if (_error != null) ...[
                       const SizedBox(height: 8),
-                      Text(_error!,
-                          style: TextStyle(color: theme.colorScheme.error)),
+                      Text(
+                        _error!,
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
                     ],
                     const SizedBox(height: 16),
                     Row(
@@ -238,7 +240,8 @@ class _TmdbDetailSheetState extends State<TmdbDetailSheet> {
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2),
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.add),
                             label: Text(
@@ -328,58 +331,74 @@ class _CastTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(right: 12),
-      child: SizedBox(
-        width: 72,
-        child: Column(
-          children: [
-            ClipOval(
-              child: member.profileUrl == null
-                  ? Container(
-                      width: 56,
-                      height: 56,
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      alignment: Alignment.center,
-                      child: Text(
-                        member.name.isEmpty ? '?' : member.name[0],
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: member.profileUrl!,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                      placeholder: (_, _) => Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      // Tap a cast member to open their filmography (DAN-52).
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PersonScreen(
+            person: TmdbPerson(
+              id: member.id,
+              name: member.name,
+              profileUrl: member.profileUrl,
+            ),
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: SizedBox(
+          width: 72,
+          child: Column(
+            children: [
+              ClipOval(
+                child: member.profileUrl == null
+                    ? Container(
                         width: 56,
                         height: 56,
                         color: theme.colorScheme.surfaceContainerHighest,
-                      ),
-                      errorWidget: (_, _, _) => Container(
+                        alignment: Alignment.center,
+                        child: Text(
+                          member.name.isEmpty ? '?' : member.name[0],
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: member.profileUrl!,
                         width: 56,
                         height: 56,
-                        color: theme.colorScheme.surfaceContainerHighest,
+                        fit: BoxFit.cover,
+                        placeholder: (_, _) => Container(
+                          width: 56,
+                          height: 56,
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                        errorWidget: (_, _, _) => Container(
+                          width: 56,
+                          height: 56,
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
                       ),
-                    ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              member.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall,
-            ),
-            Text(
-              member.character,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
-            ),
-          ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                member.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+              Text(
+                member.character,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

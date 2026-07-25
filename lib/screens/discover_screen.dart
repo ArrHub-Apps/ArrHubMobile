@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../api/tmdb_api.dart';
 import '../state/app_state.dart';
 import '../widgets/tmdb_detail_sheet.dart';
+import 'person_screen.dart';
 
 /// TMDB-powered discovery: trending/popular/top-rated carousels for
 /// movies and TV, with one-tap add to Radarr/Sonarr.
@@ -220,16 +221,29 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ),
         Expanded(
           child: searching
-              ? _SearchResults(
-                  key: ValueKey('search$_movies$_query'),
-                  data: _sections.putIfAbsent(
-                    'search|$_movies|$_query',
-                    _SectionData.new,
-                  ),
-                  fetchPage: (page) => _movies
-                      ? api.searchMovies(_query, page)
-                      : api.searchTv(_query, page),
-                  inLibraryIds: inLibrary,
+              ? Column(
+                  children: [
+                    // People matching the query (DAN-52) — tap one to see their
+                    // filmography. Media-type agnostic, so keyed by query only.
+                    _PeopleStrip(
+                      key: ValueKey('people|$_query'),
+                      api: api,
+                      query: _query,
+                    ),
+                    Expanded(
+                      child: _SearchResults(
+                        key: ValueKey('search$_movies$_query'),
+                        data: _sections.putIfAbsent(
+                          'search|$_movies|$_query',
+                          _SectionData.new,
+                        ),
+                        fetchPage: (page) => _movies
+                            ? api.searchMovies(_query, page)
+                            : api.searchTv(_query, page),
+                        inLibraryIds: inLibrary,
+                      ),
+                    ),
+                  ],
                 )
               : FutureBuilder<List<TmdbGenre>>(
                   future: genresFuture,
@@ -263,6 +277,134 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// Horizontal strip of people matching the search query (DAN-52). Renders
+/// nothing while loading or when no people (with artwork) match; tapping one
+/// opens their filmography. Loads a single page — enough for a "did you mean
+/// this actor" hint above the title results.
+class _PeopleStrip extends StatefulWidget {
+  final TmdbApi api;
+  final String query;
+
+  const _PeopleStrip({super.key, required this.api, required this.query});
+
+  @override
+  State<_PeopleStrip> createState() => _PeopleStripState();
+}
+
+class _PeopleStripState extends State<_PeopleStrip> {
+  late final Future<List<TmdbPerson>> _future = _load();
+
+  Future<List<TmdbPerson>> _load() async {
+    try {
+      final people = await widget.api.searchPerson(widget.query, 1);
+      return people.where((p) => p.profileUrl != null).take(10).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<TmdbPerson>>(
+      future: _future,
+      builder: (context, snapshot) {
+        final people = snapshot.data ?? [];
+        if (people.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'People',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 104,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: people.length,
+                itemBuilder: (context, i) => _PersonChip(person: people[i]),
+              ),
+            ),
+            const Divider(height: 17),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PersonChip extends StatelessWidget {
+  final TmdbPerson person;
+  const _PersonChip({required this.person});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => PersonScreen(person: person))),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: SizedBox(
+          width: 68,
+          child: Column(
+            children: [
+              ClipOval(
+                child: person.profileUrl == null
+                    ? Container(
+                        width: 60,
+                        height: 60,
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: Text(
+                          person.name.isEmpty ? '?' : person.name[0],
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: person.profileUrl!,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        placeholder: (_, _) => Container(
+                          width: 60,
+                          height: 60,
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                        errorWidget: (_, _, _) => Container(
+                          width: 60,
+                          height: 60,
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                person.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

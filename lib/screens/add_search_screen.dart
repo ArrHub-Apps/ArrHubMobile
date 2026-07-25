@@ -201,6 +201,20 @@ class AddSheet extends StatefulWidget {
 }
 
 class AddSheetState extends State<AddSheet> {
+  // Sonarr monitor types (DAN-53) — Radarr has no equivalent.
+  static const _monitorOptions = <(String, String)>[
+    ('all', 'All'),
+    ('future', 'Future'),
+    ('missing', 'Missing'),
+    ('existing', 'Existing'),
+    ('firstSeason', 'First Season'),
+    ('latestSeason', 'Latest Season'),
+    ('pilot', 'Pilot'),
+    ('recent', 'Recent'),
+    ('monitorSpecials', 'Specials only'),
+    ('none', 'None'),
+  ];
+
   List<QualityProfile>? _profiles;
   List<RootFolder>? _rootFolders;
   List<DiskSpace> _disks = [];
@@ -209,6 +223,35 @@ class AddSheetState extends State<AddSheet> {
   bool _searchNow = true;
   bool _adding = false;
   String? _error;
+
+  // TV monitor type + per-season selection (DAN-53, Sonarr only).
+  String _monitor = 'all';
+  bool _selectSeasons = false;
+  late final List<Map<String, dynamic>> _seasons = _parseSeasons();
+
+  bool get _isSeries => widget.state.type == ServerType.sonarr;
+
+  /// Seasons from the lookup result's raw JSON, sorted with specials (0) last —
+  /// where a user expects them, unlike Sonarr's specials-first ordering.
+  List<Map<String, dynamic>> _parseSeasons() {
+    final raw = widget.item.raw['seasons'] as List<dynamic>? ?? [];
+    final list =
+        raw
+            .map(
+              (s) => {
+                'seasonNumber': (s as Map)['seasonNumber'] as int? ?? 0,
+                'monitored': s['monitored'] as bool? ?? false,
+              },
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                (a['seasonNumber'] as int).compareTo(b['seasonNumber'] as int),
+          );
+    final specialsIdx = list.indexWhere((s) => s['seasonNumber'] == 0);
+    if (specialsIdx > -1) list.add(list.removeAt(specialsIdx));
+    return list;
+  }
 
   @override
   void initState() {
@@ -266,6 +309,8 @@ class AddSheetState extends State<AddSheet> {
         qualityProfileId: _profileId!,
         rootFolderPath: _rootFolder!,
         searchNow: _searchNow,
+        monitor: _isSeries ? _monitor : null,
+        seasons: _isSeries && _selectSeasons ? _seasons : null,
       );
       unawaited(widget.state.refreshLibrary());
       if (!mounted) return;
@@ -280,6 +325,80 @@ class AddSheetState extends State<AddSheet> {
         _error = e.toString();
       });
     }
+  }
+
+  /// Monitor dropdown + optional per-season picker (DAN-53, Sonarr only).
+  List<Widget> _seasonControls() {
+    return [
+      const SizedBox(height: 12),
+      if (!_selectSeasons)
+        DropdownButtonFormField<String>(
+          initialValue: _monitor,
+          decoration: const InputDecoration(
+            labelText: 'Monitor',
+            border: OutlineInputBorder(),
+          ),
+          items: _monitorOptions
+              .map((o) => DropdownMenuItem(value: o.$1, child: Text(o.$2)))
+              .toList(),
+          onChanged: (v) => setState(() => _monitor = v ?? 'all'),
+        ),
+      if (_seasons.isNotEmpty)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Select seasons'),
+          value: _selectSeasons,
+          onChanged: (v) => setState(() => _selectSeasons = v),
+        ),
+      if (_selectSeasons && _seasons.isNotEmpty) ...[
+        Row(
+          children: [
+            Text('Seasons', style: Theme.of(context).textTheme.labelLarge),
+            const Spacer(),
+            TextButton(
+              onPressed: () => setState(() {
+                for (final s in _seasons) {
+                  s['monitored'] = true;
+                }
+              }),
+              child: const Text('All'),
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                for (final s in _seasons) {
+                  s['monitored'] = false;
+                }
+              }),
+              child: const Text('None'),
+            ),
+          ],
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final s in _seasons)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(
+                      s['seasonNumber'] == 0
+                          ? 'Specials'
+                          : 'Season ${s['seasonNumber']}',
+                    ),
+                    value: s['monitored'] as bool,
+                    onChanged: (v) =>
+                        setState(() => s['monitored'] = v ?? false),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 
   @override
@@ -353,22 +472,26 @@ class AddSheetState extends State<AddSheet> {
                 Row(
                   children: [
                     if (_selectedDisk!.usedFraction > 0.9) ...[
-                      const Icon(Icons.warning_amber,
-                          size: 16, color: Colors.amber),
+                      const Icon(
+                        Icons.warning_amber,
+                        size: 16,
+                        color: Colors.amber,
+                      ),
                       const SizedBox(width: 4),
                     ],
                     Text(
                       '${_selectedDisk!.freeLabel} free of '
                       '${_selectedDisk!.totalLabel} on this drive',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _selectedDisk!.usedFraction > 0.9
-                                ? Colors.amber
-                                : null,
-                          ),
+                        color: _selectedDisk!.usedFraction > 0.9
+                            ? Colors.amber
+                            : null,
+                      ),
                     ),
                   ],
                 ),
               ],
+              if (_isSeries) ..._seasonControls(),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Search for download now'),

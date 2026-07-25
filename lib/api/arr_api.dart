@@ -25,28 +25,31 @@ class ArrApi {
   final http.Client _client;
 
   ArrApi(this.config, {http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   bool get _isRadarr => config.type == ServerType.radarr;
 
   String get _mediaPath => _isRadarr ? 'movie' : 'series';
 
-  Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri.parse('${config.activeUrl}/api/v3/$path')
-          .replace(queryParameters: query);
+  Uri _uri(String path, [Map<String, String>? query]) => Uri.parse(
+    '${config.activeUrl}/api/v3/$path',
+  ).replace(queryParameters: query);
 
   Map<String, String> get _headers => {
-        'X-Api-Key': config.apiKey,
-        'Content-Type': 'application/json',
-      };
+    'X-Api-Key': config.apiKey,
+    'Content-Type': 'application/json',
+  };
 
   // Generous default: the server can be slow to respond while the
   // download client saturates the host's disk/network.
-  Future<dynamic> _get(String path,
-      [Map<String, String>? query,
-      Duration timeout = const Duration(seconds: 60)]) async {
-    final resp =
-        await _client.get(_uri(path, query), headers: _headers).timeout(timeout);
+  Future<dynamic> _get(
+    String path, [
+    Map<String, String>? query,
+    Duration timeout = const Duration(seconds: 60),
+  ]) async {
+    final resp = await _client
+        .get(_uri(path, query), headers: _headers)
+        .timeout(timeout);
     _check(resp);
     return jsonDecode(resp.body);
   }
@@ -101,8 +104,9 @@ class ArrApi {
   /// on system/status within [timeout]. Used to decide between LAN and remote URLs.
   Future<bool> probe([Duration timeout = const Duration(seconds: 4)]) async {
     try {
-      final resp =
-          await _client.get(_uri('system/status'), headers: _headers).timeout(timeout);
+      final resp = await _client
+          .get(_uri('system/status'), headers: _headers)
+          .timeout(timeout);
       return resp.statusCode >= 200 && resp.statusCode < 300;
     } catch (_) {
       return false;
@@ -111,9 +115,7 @@ class ArrApi {
 
   Future<List<MediaItem>> getLibrary() async {
     final list = await _get(_mediaPath) as List<dynamic>;
-    return list
-        .map((e) => _toItem(e as Map<String, dynamic>))
-        .toList()
+    return list.map((e) => _toItem(e as Map<String, dynamic>)).toList()
       ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
   }
 
@@ -147,15 +149,20 @@ class ArrApi {
   /// Recent completed imports (download finished + moved into library),
   /// newest first, as (date, human title) pairs.
   Future<List<(DateTime, String)>> recentImports() async {
-    final data = await _get('history', {
-      'page': '1',
-      'pageSize': '20',
-      'sortKey': 'date',
-      'sortDirection': 'descending',
-      'eventType': '3', // downloadFolderImported
-      if (_isRadarr) 'includeMovie': 'true',
-      if (!_isRadarr) ...{'includeSeries': 'true', 'includeEpisode': 'true'},
-    }) as Map<String, dynamic>;
+    final data =
+        await _get('history', {
+              'page': '1',
+              'pageSize': '20',
+              'sortKey': 'date',
+              'sortDirection': 'descending',
+              'eventType': '3', // downloadFolderImported
+              if (_isRadarr) 'includeMovie': 'true',
+              if (!_isRadarr) ...{
+                'includeSeries': 'true',
+                'includeEpisode': 'true',
+              },
+            })
+            as Map<String, dynamic>;
     final records = data['records'] as List<dynamic>? ?? [];
     final imports = <(DateTime, String)>[];
     for (final r in records) {
@@ -164,13 +171,13 @@ class ArrApi {
       if (date == null) continue;
       String title;
       if (_isRadarr) {
-        title = (record['movie'] as Map<String, dynamic>?)?['title']
-                as String? ??
+        title =
+            (record['movie'] as Map<String, dynamic>?)?['title'] as String? ??
             record['sourceTitle'] as String? ??
             'Unknown movie';
       } else {
-        final series = (record['series'] as Map<String, dynamic>?)?['title']
-                as String? ??
+        final series =
+            (record['series'] as Map<String, dynamic>?)?['title'] as String? ??
             'Unknown series';
         final episode = record['episode'] as Map<String, dynamic>?;
         if (episode != null) {
@@ -197,8 +204,14 @@ class ArrApi {
     final data = await _get('queue', query) as Map<String, dynamic>;
     final records = data['records'] as List<dynamic>? ?? [];
     return records
-        .map((r) => QueueItem.fromJson(r as Map<String, dynamic>, _isRadarr,
-            config.activeUrl, config.apiKey))
+        .map(
+          (r) => QueueItem.fromJson(
+            r as Map<String, dynamic>,
+            _isRadarr,
+            config.activeUrl,
+            config.apiKey,
+          ),
+        )
         .toList();
   }
 
@@ -273,11 +286,23 @@ class ArrApi {
     return null;
   }
 
+  /// Adds a movie/series with the chosen profile and folder.
+  ///
+  /// Sonarr-only monitoring (DAN-53): pass [monitor] for a rule-based add
+  /// (Sonarr's `addOptions.monitor` picks the seasons — one POST does it), or
+  /// pass explicit [seasons] `{'seasonNumber': int, 'monitored': bool}` for
+  /// exact-season selection. Exact seasons can't go through `addOptions.monitor`
+  /// — Sonarr applies that rule server-side *after* the posted `seasons[]` and
+  /// overwrites them — so we add unmonitored (monitor:'none'), commit the
+  /// per-season flags with a PUT (which honors them), then search only what we
+  /// switched on. Both are ignored for Radarr.
   Future<MediaItem> add({
     required MediaItem item,
     required int qualityProfileId,
     required String rootFolderPath,
     bool searchNow = true,
+    String? monitor,
+    List<Map<String, dynamic>>? seasons,
   }) async {
     final body = Map<String, dynamic>.from(item.raw);
     body['qualityProfileId'] = qualityProfileId;
@@ -286,14 +311,54 @@ class ArrApi {
 
     if (_isRadarr) {
       body['addOptions'] = {'searchForMovie': searchNow};
-    } else {
-      body['addOptions'] = {'searchForMissingEpisodes': searchNow};
-      body['seasonFolder'] = true;
-      final langId = await _firstLanguageProfileId();
-      if (langId != null) body['languageProfileId'] = langId;
+      final added = await _post(_mediaPath, body) as Map<String, dynamic>;
+      return _toItem(added);
     }
 
+    // --- Sonarr ---
+    body['seasonFolder'] = true;
+    final langId = await _firstLanguageProfileId();
+    if (langId != null) body['languageProfileId'] = langId;
+
+    if (seasons == null || seasons.isEmpty) {
+      // Rule-based: let Sonarr's monitor rule choose the seasons.
+      body['addOptions'] = {
+        'searchForMissingEpisodes': searchNow,
+        'monitor': monitor ?? 'all',
+      };
+      final added = await _post(_mediaPath, body) as Map<String, dynamic>;
+      return _toItem(added);
+    }
+
+    // Exact-season: add unmonitored, then PUT the per-season flags.
+    body['addOptions'] = {'searchForMissingEpisodes': false, 'monitor': 'none'};
     final added = await _post(_mediaPath, body) as Map<String, dynamic>;
+    final addedId = added['id'] as int?;
+    final addedSeasons = added['seasons'] as List<dynamic>?;
+    if (addedId != null && addedSeasons != null) {
+      final wanted = {
+        for (final s in seasons)
+          s['seasonNumber'] as int: s['monitored'] as bool,
+      };
+      final merged = Map<String, dynamic>.from(added);
+      // Keep the series itself monitored — a series-level unmonitored flag would
+      // gate off every season regardless of the per-season flags below.
+      merged['monitored'] = true;
+      merged['seasons'] = addedSeasons.map((s) {
+        final season = Map<String, dynamic>.from(s as Map<String, dynamic>);
+        season['monitored'] = wanted[season['seasonNumber'] as int] ?? false;
+        return season;
+      }).toList();
+      await _put('$_mediaPath/$addedId', merged);
+      if (searchNow) {
+        // SeriesSearch only grabs monitored episodes — exactly the seasons just
+        // enabled. Best effort: the series is added and correctly monitored even
+        // if this fails, leaving the search for the user to trigger in Sonarr.
+        try {
+          await _post('command', {'name': 'SeriesSearch', 'seriesId': addedId});
+        } catch (_) {}
+      }
+    }
     return _toItem(added);
   }
 
@@ -309,17 +374,19 @@ class ArrApi {
   Future<List<Episode>> getEpisodes(int seriesId) async {
     final list =
         await _get('episode', {'seriesId': '$seriesId'}) as List<dynamic>;
-    return list
-        .map((e) => Episode.fromJson(e as Map<String, dynamic>))
-        .toList()
-      ..sort((a, b) => a.seasonNumber != b.seasonNumber
-          ? a.seasonNumber.compareTo(b.seasonNumber)
-          : a.episodeNumber.compareTo(b.episodeNumber));
+    return list.map((e) => Episode.fromJson(e as Map<String, dynamic>)).toList()
+      ..sort(
+        (a, b) => a.seasonNumber != b.seasonNumber
+            ? a.seasonNumber.compareTo(b.seasonNumber)
+            : a.episodeNumber.compareTo(b.episodeNumber),
+      );
   }
 
   Future<void> setEpisodesMonitored(List<int> episodeIds, bool monitored) =>
-      _put('episode/monitor',
-          {'episodeIds': episodeIds, 'monitored': monitored});
+      _put('episode/monitor', {
+        'episodeIds': episodeIds,
+        'monitored': monitored,
+      });
 
   /// Interactive search: asks the server to query all indexers for
   /// releases. Slow (30s+) — the server contacts each indexer live.
@@ -337,8 +404,9 @@ class ArrApi {
       if (seasonNumber != null) 'seasonNumber': '$seasonNumber',
       if (episodeId != null) 'episodeId': '$episodeId',
     };
-    final list = await _get('release', query, const Duration(seconds: 150))
-        as List<dynamic>;
+    final list =
+        await _get('release', query, const Duration(seconds: 150))
+            as List<dynamic>;
     final releases = list
         .map((e) => Release.fromJson(e as Map<String, dynamic>))
         .toList();

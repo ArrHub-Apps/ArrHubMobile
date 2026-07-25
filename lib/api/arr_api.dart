@@ -330,34 +330,59 @@ class ArrApi {
       return _toItem(added);
     }
 
-    // Exact-season: add unmonitored, then PUT the per-season flags.
+    // Exact-season selection. Sonarr populates a new series' episodes
+    // asynchronously (via RefreshSeries) and applies addOptions.monitor to them
+    // at that point — so any season/episode flags we set before that refresh
+    // completes get stomped by the 'none' rule once episodes appear. The fix:
+    // add unmonitored, wait for the episode list to populate (proof the initial
+    // refresh has consumed addOptions), then commit monitoring for real. We set
+    // it at both levels — season flags drive Sonarr's season toggle, and
+    // /episode/monitor is the authoritative per-episode flag that actually makes
+    // downloads trigger and survives the add-time rule.
     body['addOptions'] = {'searchForMissingEpisodes': false, 'monitor': 'none'};
     final added = await _post(_mediaPath, body) as Map<String, dynamic>;
     final addedId = added['id'] as int?;
-    final addedSeasons = added['seasons'] as List<dynamic>?;
-    if (addedId != null && addedSeasons != null) {
-      final wanted = {
-        for (final s in seasons)
-          s['seasonNumber'] as int: s['monitored'] as bool,
-      };
-      final merged = Map<String, dynamic>.from(added);
-      // Keep the series itself monitored — a series-level unmonitored flag would
-      // gate off every season regardless of the per-season flags below.
-      merged['monitored'] = true;
-      merged['seasons'] = addedSeasons.map((s) {
-        final season = Map<String, dynamic>.from(s as Map<String, dynamic>);
-        season['monitored'] = wanted[season['seasonNumber'] as int] ?? false;
-        return season;
-      }).toList();
-      await _put('$_mediaPath/$addedId', merged);
-      if (searchNow) {
-        // SeriesSearch only grabs monitored episodes — exactly the seasons just
-        // enabled. Best effort: the series is added and correctly monitored even
-        // if this fails, leaving the search for the user to trigger in Sonarr.
-        try {
-          await _post('command', {'name': 'SeriesSearch', 'seriesId': addedId});
-        } catch (_) {}
-      }
+    if (addedId == null) return _toItem(added);
+
+    final wanted = {
+      for (final s in seasons) s['seasonNumber'] as int: s['monitored'] as bool,
+    };
+
+    // Wait (bounded) for the initial refresh to create episodes.
+    var episodes = <dynamic>[];
+    for (var i = 0; i < 20; i++) {
+      episodes = await _get('episode', {'seriesId': '$addedId'}) as List<dynamic>;
+      if (episodes.isNotEmpty) break;
+      await Future<void>.delayed(const Duration(milliseconds: 750));
+    }
+
+    // Commit season-level monitoring on the authoritative current object.
+    final current = await _get('$_mediaPath/$addedId') as Map<String, dynamic>;
+    current['monitored'] = true;
+    current['seasons'] = ((current['seasons'] as List<dynamic>?) ?? []).map((s) {
+      final season = Map<String, dynamic>.from(s as Map<String, dynamic>);
+      season['monitored'] = wanted[season['seasonNumber'] as int] ?? false;
+      return season;
+    }).toList();
+    await _put('$_mediaPath/$addedId', current);
+
+    // Commit episode-level monitoring for the chosen seasons — this is what
+    // actually makes SeriesSearch (and future grabs) pick them up.
+    final wantedEpisodeIds = episodes
+        .where((e) => wanted[(e as Map)['seasonNumber'] as int? ?? -1] == true)
+        .map((e) => (e as Map)['id'] as int)
+        .toList();
+    if (wantedEpisodeIds.isNotEmpty) {
+      await setEpisodesMonitored(wantedEpisodeIds, true);
+    }
+
+    if (searchNow) {
+      // SeriesSearch grabs only monitored episodes — exactly the seasons just
+      // enabled. Best effort: the series is added and monitored even if this
+      // fails, leaving the search for the user to trigger from Sonarr.
+      try {
+        await _post('command', {'name': 'SeriesSearch', 'seriesId': addedId});
+      } catch (_) {}
     }
     return _toItem(added);
   }

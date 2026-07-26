@@ -12,7 +12,9 @@ import 'screens/settings_screen.dart';
 import 'services/cert_pinning.dart';
 import 'services/notification_service.dart';
 import 'services/settings_store.dart';
+import 'services/update_service.dart';
 import 'state/app_state.dart';
+import 'widgets/app_update.dart';
 
 /// WorkManager entry point — runs in a background isolate on a ~15 min
 /// cadence to check for finished downloads. The isolate has its own memory,
@@ -195,6 +197,35 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Best-effort update check on launch. Notify only — a SnackBar points the user
+    // at the download/install sheet; nothing downloads or installs on its own
+    // (Settings → App updates is the explicit path). Runs after first frame so it
+    // never blocks startup, and swallows failures (offline, no release yet).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+  }
+
+  Future<void> _checkForUpdate() async {
+    try {
+      final update = await UpdateService.checkForUpdate();
+      if (update == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Update available: ArrHub ${update.version}'),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Update',
+            onPressed: () => showAppUpdateSheet(context, update),
+          ),
+        ),
+      );
+    } catch (_) {
+      // Swallow — the Settings card surfaces errors when the user checks explicitly.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

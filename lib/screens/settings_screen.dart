@@ -12,6 +12,7 @@ import '../models/server_config.dart';
 import '../services/notification_service.dart';
 import '../services/settings_store.dart';
 import '../state/app_state.dart';
+import '../widgets/app_update.dart';
 import '../widgets/arrhub_logo.dart';
 import '../widgets/poster.dart';
 import 'qr_pair_screen.dart';
@@ -72,6 +73,13 @@ class SettingsScreen extends StatelessWidget {
           subtitle: 'Disk space, library sizes & cleanup',
           pageTitle: 'Storage',
           cards: [_StorageCard(), SizedBox(height: 16), _CleanupCard()],
+        ),
+        _SettingsMenuTile(
+          icon: Icons.system_update_outlined,
+          title: 'App updates',
+          subtitle: 'Check for a new version',
+          pageTitle: 'App updates',
+          cards: [AppUpdateCard()],
         ),
         _SettingsMenuTile(
           icon: Icons.info_outline,

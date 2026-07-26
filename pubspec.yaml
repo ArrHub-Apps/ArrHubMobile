@@ -17,6 +17,11 @@ dependencies:
   http: ^1.6.0
   image_picker: ^1.1.2
   mobile_scanner: ^7.2.0
+  # In-app self-update: package_info_plus reads the running app's version to compare
+  # against the latest GitHub Release; open_filex hands the downloaded APK to Android's
+  # package installer (it ships its own FileProvider, so no extra manifest entry).
+  open_filex: ^4.5.0
+  package_info_plus: ^8.1.0
   path_provider: ^2.1.6
   provider: ^6.1.5+1
   shared_preferences: ^2.5.5

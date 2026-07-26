@@ -6,21 +6,21 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// In-app self-update against a dedicated PUBLIC GitHub Releases repo.
+/// In-app self-update against this app's own PUBLIC GitHub Releases.
 ///
 /// The app is sideloaded (not on the Play Store), so it updates itself: check the
-/// latest release of ArrHub-Apps/MobileReleases, and if it's newer than the running
-/// build, download the APK and hand it to Android's package installer. This mirrors
-/// the desktop app's model (public releases repo read anonymously — DAN-47), and the
-/// same notify-then-download UX (never silently downloads/installs).
+/// latest release of ArrHub-Apps/ArrHubMobile, and if it's newer than the running
+/// build, download the APK and hand it to Android's package installer. Reading those
+/// releases anonymously works because the repo is public (mirrors the desktop app's
+/// model — DAN-47). Same notify-then-download UX (never silently downloads/installs).
 ///
 /// Android only: iOS can't sideload an update this way, so [checkForUpdate] returns
 /// null on non-Android platforms and callers hide the update UI.
 class UpdateService {
-  /// The public feed. Holds no source, only APK releases + their metadata; read
-  /// unauthenticated (a token baked into a distributed APK would be extractable).
+  /// This repo's own public Releases, read unauthenticated (a token baked into a
+  /// distributed APK would be extractable anyway).
   static const _owner = 'ArrHub-Apps';
-  static const _repo = 'MobileReleases';
+  static const _repo = 'ArrHubMobile';
 
   static Uri get _latestReleaseUrl =>
       Uri.parse('https://api.github.com/repos/$_owner/$_repo/releases/latest');

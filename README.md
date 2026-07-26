@@ -53,10 +53,14 @@ $env:JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=C:\Users\dpbre\dev\cacerts-
 
 The app is sideloaded (not on the Play Store), so it updates itself. On launch and
 from **Settings → App updates**, `lib/services/update_service.dart` checks the latest
-release of the public feed repo `ArrHub-Apps/MobileReleases`, and if it's newer than
-the running build, downloads the APK and hands it to Android's package installer
-(needs the `REQUEST_INSTALL_PACKAGES` permission). Nothing installs silently — the
-user opts in and confirms in the system UI.
+release of this repo (`ArrHub-Apps/ArrHubMobile`), and if it's newer than the running
+build, downloads the APK and hands it to Android's package installer (needs the
+`REQUEST_INSTALL_PACKAGES` permission). Nothing installs silently — the user opts in
+and confirms in the system UI.
+
+> ⚠️ The update check reads the repo's Releases anonymously, so it only works once
+> this repo is **public**. (Previously releases went to a separate public
+> `MobileReleases` repo while this one was private; that's no longer needed.)
 
 ### Cutting a release
 
@@ -64,7 +68,7 @@ Releases are built and published by `.github/workflows/release.yml` on a version
 
 1. Bump `version` in `pubspec.yaml`, commit.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. CI builds a **signed** release APK and publishes it to `MobileReleases`.
+3. CI builds a **signed** release APK and publishes it to this repo's Releases.
 
 **Signing is mandatory and must be stable.** Android refuses an update whose signature
 doesn't match the installed app, so every release is signed with the *same* keystore.
@@ -77,7 +81,9 @@ reconstructed from repo secrets:
 | `ANDROID_KEYSTORE_PASSWORD` | store password |
 | `ANDROID_KEY_PASSWORD` | key password |
 | `ANDROID_KEY_ALIAS` | key alias |
-| `RELEASES_TOKEN` | PAT with `contents: write` on `ArrHub-Apps/MobileReleases` |
+
+CI publishes to this repo's own Releases, so the built-in `GITHUB_TOKEN` (granted
+`contents: write` in the workflow) is used — no PAT is needed.
 
 Generate the keystore once (`keytool -genkey -v -keystore upload-keystore.jks -keyalg
 RSA -keysize 2048 -validity 10000 -alias upload`), keep it safe, and base64 it into

@@ -1,53 +1,115 @@
-# Media Manager
+# ArrHub Mobile
 
-A Flutter Android app for managing your [Radarr](https://radarr.video) and
-[Sonarr](https://sonarr.tv) servers from your phone: browse your library,
-search for new movies and shows, and add them with a chosen quality profile
-and root folder.
+**Your media server, in your pocket.** An Android app for managing your
+[Radarr](https://radarr.video) and [Sonarr](https://sonarr.tv) servers from your
+phone: browse your library, discover new movies and shows via TMDB, add them with
+a chosen quality profile and root folder, and watch downloads progress live.
+
+It's the companion to [ArrHub Desktop](https://github.com/ArrHub-Apps/ArrHubDesktop) —
+scan the QR code the desktop app shows and both servers are configured
+automatically — but it works standalone against any Radarr/Sonarr instance too.
+
+<p align="center">
+  <img src="docs/screenshots/movies.jpeg" alt="ArrHub Mobile — Radarr library" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/discover.jpeg" alt="ArrHub Mobile — Discover" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/settings.jpeg" alt="ArrHub Mobile — Settings" width="30%">
+</p>
 
 ## Features
 
-- **Movies tab** — your Radarr library with posters and download status
-- **TV Shows tab** — your Sonarr library
-- **Add new** — tap **+** on either tab to search TMDB/TVDB (via your
-  server's lookup API) and add items, with quality profile / root folder
-  selection and an optional immediate download search
-- **Settings tab** — server URL + API key for each service, with a
-  connection test; keys are stored in Android encrypted storage
+- **Movies & TV Shows** — your Radarr and Sonarr libraries with posters, download
+  status, filtering and sorting.
+- **Discover** — TMDB-powered trending / popular / top-rated carousels and search
+  for both movies and TV, with one-tap add straight to Radarr/Sonarr and a
+  person/filmography view.
+- **Add new** — pick quality profile and root folder, with an optional immediate
+  download search; series honour exact-season monitoring.
+- **Queue** — a combined Radarr + Sonarr download queue with live progress and
+  remove / blocklist actions.
+- **QR pairing** — scan the code from ArrHub Desktop (**Settings → Sharing**) and
+  both servers are configured for you, including the remote HTTPS address (with
+  pinned certificate) and the host's TMDB key — no typing URLs or keys.
+- **Notifications** — optional download-complete alerts.
+- **Self-updating** — sideloaded, so it checks this repo's Releases and installs
+  updates itself (you always confirm in the system installer).
+- **Secure by default** — API keys live in Android's encrypted storage; remote
+  connections are certificate-pinned.
+
+### Screenshots
+
+| Movies | Discover | Settings |
+| --- | --- | --- |
+| ![Movies](docs/screenshots/movies.jpeg) | ![Discover](docs/screenshots/discover.jpeg) | ![Settings](docs/screenshots/settings.jpeg) |
+
+## Install
+
+Grab the latest **`app-release.apk`** from the [Releases](../../releases) page and
+open it on your phone. Android will ask you to allow installs from this source the
+first time — approve it, then tap **Install**.
+
+Once installed the app keeps itself up to date: on launch and from
+**Settings → App updates** it checks this repo's Releases and, if a newer build is
+available, downloads the APK and hands it to Android's package installer. Nothing
+installs silently — you opt in and confirm in the system UI.
+
+> The update check reads Releases anonymously, so it only works while this repo is
+> **public**.
+
+No release published yet? Build it yourself — see below.
 
 ## Setup
 
-1. In Radarr/Sonarr, copy the API key from **Settings → General → API Key**.
-2. In the app's Settings tab, enter each server's URL (e.g.
-   `http://192.168.1.10:7878` for Radarr, `:8989` for Sonarr) and API key,
-   then **Test** and **Save**.
+You can connect to your servers two ways:
+
+**Pair with ArrHub Desktop (easiest).** In the desktop app open
+**Settings → Sharing** to show a pairing QR, then in the mobile app scan it. Both
+Radarr and Sonarr are configured automatically, including remote access if the
+host has it set up.
+
+**Manual.** In Radarr/Sonarr, copy the API key from **Settings → General → API
+Key**. In the app's **Settings → Servers**, enter each server's URL (e.g.
+`http://192.168.1.10:7878` for Radarr, `:8989` for Sonarr) and API key, then
+**Test** and **Save**. For Discover, add a TMDB API key under **Settings →
+Discover**.
 
 The app talks directly to your servers, so your phone must be able to reach
-them — on the same LAN, or via a VPN such as WireGuard/Tailscale when away
-from home.
+them — on the same LAN, or via a VPN such as WireGuard/Tailscale when away from
+home (pairing with the desktop app sets this up for you).
 
-## Development
+## Build from source
+
+### Prerequisites
+
+- **Flutter** with Dart SDK **3.12+** (`flutter doctor` should be clean for
+  Android).
+- Android SDK / an emulator or a device with USB debugging.
+
+### Run in development
 
 ```sh
 flutter pub get
 flutter run          # with a device or emulator connected
-flutter build apk    # release APK in build/app/outputs/flutter-apk/
 ```
 
-Note for this machine: AVG Antivirus intercepts HTTPS with its own root
-certificate, which Java doesn't trust by default. Build with a trust store
-that includes AVG's root:
+### Build an APK
 
-```powershell
-$env:JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=C:\Users\dpbre\dev\cacerts-with-avg -Djavax.net.ssl.trustStorePassword=changeit"
+```sh
+flutter build apk    # -> build/app/outputs/flutter-apk/app-release.apk
 ```
 
-## Structure
+> **Local signing.** A release build needs a signing config at
+> `android/key.properties` (gitignored) pointing at your keystore — see
+> [Cutting a release](#cutting-a-release) for why signing must be stable. Without
+> it, use `flutter build apk --debug` for a quick local build.
 
-- `lib/api/arr_api.dart` — shared Radarr/Sonarr v3 API client
-- `lib/models/` — `ServerConfig`, unified `MediaItem` (movie or series)
-- `lib/state/app_state.dart` — per-service state (config + library cache)
-- `lib/screens/` — library, add-search, and settings screens
+> **AVG Antivirus (specific machines).** AVG intercepts HTTPS with its own root
+> certificate, which Java doesn't trust by default. Build with a trust store that
+> includes AVG's root:
+> ```powershell
+> $env:JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=C:\Users\dpbre\dev\cacerts-with-avg -Djavax.net.ssl.trustStorePassword=changeit"
+> ```
 
 ## Releases & in-app updates
 
@@ -88,3 +150,26 @@ CI publishes to this repo's own Releases, so the built-in `GITHUB_TOKEN` (grante
 Generate the keystore once (`keytool -genkey -v -keystore upload-keystore.jks -keyalg
 RSA -keysize 2048 -validity 10000 -alias upload`), keep it safe, and base64 it into
 `ANDROID_KEYSTORE_BASE64`. Losing it means users can't auto-update past that point.
+
+## Project layout
+
+```
+lib/
+  api/         Radarr/Sonarr v3 and TMDB API clients
+  models/      ServerConfig, unified MediaItem, QueueItem
+  state/       app_state.dart — per-service config + library/queue cache
+  screens/     library, discover, queue, add-search, episodes, settings, QR pairing
+  services/    self-update, notifications, desktop pairing, cert pinning, secure storage
+  widgets/     posters, TMDB detail sheet, shared UI
+android/       Android host project & signing config
+.github/workflows/release.yml   Signed APK build + publish on a version tag
+```
+
+## Tech stack
+
+Flutter · Dart 3 · Provider · `http` · `flutter_secure_storage` ·
+`cached_network_image` · `mobile_scanner` · `flutter_local_notifications`
+
+## License
+
+[MIT](LICENSE).

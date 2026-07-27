@@ -1,0 +1,55 @@
+name: media_manager
+description: "ArrHub — manage your Radarr/Sonarr media server from your phone."
+publish_to: 'none'
+version: 0.1.1+2
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  cached_network_image: ^3.4.1
+  connectivity_plus: ^6.0.0
+  crypto: ^3.0.6
+  flutter:
+    sdk: flutter
+  flutter_local_notifications: ^22.0.1
+  flutter_secure_storage: ^10.3.1
+  http: ^1.6.0
+  image_picker: ^1.1.2
+  mobile_scanner: ^7.2.0
+  # In-app self-update: package_info_plus reads the running app's version to compare
+  # against the latest GitHub Release; open_filex hands the downloaded APK to Android's
+  # package installer (it ships its own FileProvider, so no extra manifest entry).
+  open_filex: ^4.5.0
+  package_info_plus: ^8.1.0
+  path_provider: ^2.1.6
+  provider: ^6.1.5+1
+  shared_preferences: ^2.5.5
+  url_launcher: ^6.3.2
+  workmanager: ^0.9.0+3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  # iOS icons can't have an alpha channel — flatten the transparent source onto the
+  # same black the Android adaptive icon uses, so both platforms match (green mark on
+  # black) rather than iOS defaulting to a white background.
+  remove_alpha_ios: true
+  background_color_ios: "#000000"
+  image_path: "assets/icon/icon_legacy.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  # Monochrome layer: Android 13+ themed icons tint this with the system accent.
+  adaptive_icon_monochrome: "assets/icon/icon_monochrome.png"
+  # Mark is pre-sized to the safe zone in the square source PNGs; no extra inset
+  # (the tool's 16% default would otherwise shrink it into a small island).
+  adaptive_icon_foreground_inset: 0

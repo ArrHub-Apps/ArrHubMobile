@@ -1,0 +1,90 @@
+# Build + publish the signed Android APK to THIS repo's own GitHub Releases.
+#
+# Triggered by pushing a version tag (v1.2.3). Builds a release APK and uploads it
+# to ArrHub-Apps/ArrHubMobile's Releases, which the in-app self-updater
+# (lib/services/update_service.dart) reads anonymously once the repo is public.
+#
+# SIGNING IS LOAD-BEARING, NOT OPTIONAL: Android refuses to install an update whose
+# signature doesn't match the installed app. So every release MUST be signed with the
+# SAME keystore, and that keystore must live only in CI secrets (never in git). The
+# release signingConfig in android/app/build.gradle.kts reads android/key.properties,
+# which we synthesise here from secrets.
+#
+# Required repo secrets:
+#   ANDROID_KEYSTORE_BASE64  - the .jks keystore, base64-encoded
+#                              (`base64 -w0 upload-keystore.jks`)
+#   ANDROID_KEYSTORE_PASSWORD - store password
+#   ANDROID_KEY_PASSWORD      - key password
+#   ANDROID_KEY_ALIAS         - key alias
+# Publishing to its OWN repo uses the built-in GITHUB_TOKEN (needs `contents: write`,
+# set below) — no PAT/RELEASES_TOKEN needed.
+name: Release Android
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/app/keystore.jks
+          # storeFile is resolved relative to the android/app module (file(...) in the
+          # release signingConfig), so a bare filename points at the app dir.
+          cat > android/key.properties <<EOF
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=keystore.jks
+          EOF
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build signed release APK
+        run: |
+          # Version name comes from the tag (drop the leading v); build number from the
+          # run number so versionCode strictly increases each release — Android requires
+          # a higher versionCode to accept an update over an installed build.
+          VERSION="${GITHUB_REF_NAME#v}"
+          flutter build apk --release \
+            --build-name="$VERSION" \
+            --build-number="${{ github.run_number }}"
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             "build/app/outputs/flutter-apk/ArrHub-${VERSION}.apk"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            --repo ArrHub-Apps/ArrHubMobile \
+            --title "ArrHub $VERSION" \
+            --generate-notes \
+            "build/app/outputs/flutter-apk/ArrHub-${VERSION}.apk"

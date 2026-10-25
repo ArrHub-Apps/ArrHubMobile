@@ -280,6 +280,7 @@ class AddSheetState extends State<AddSheet> {
         _rootFolders = folders;
         _disks = disks;
         _languages = languages;
+        _language = languages.where((l) => l.name == 'English').firstOrNull;
         _profileId = profiles.isNotEmpty ? profiles.first.id : null;
         _rootFolder = folders.isNotEmpty ? folders.first.path : null;
       });

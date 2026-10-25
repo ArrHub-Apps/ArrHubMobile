@@ -14,6 +14,7 @@ class Release {
   final bool rejected;
   final List<String> rejections;
   final bool fullSeason;
+  final List<String> languages;
 
   const Release({
     required this.guid,
@@ -29,6 +30,7 @@ class Release {
     required this.rejected,
     required this.rejections,
     required this.fullSeason,
+    this.languages = const [],
   });
 
   bool get isTorrent => protocol == 'torrent';
@@ -64,6 +66,10 @@ class Release {
           .map((e) => e.toString())
           .toList(),
       fullSeason: json['fullSeason'] as bool? ?? false,
+      languages: (json['languages'] as List<dynamic>? ?? [])
+          .map((l) => (l as Map)['name'] as String? ?? '')
+          .where((n) => n.isNotEmpty)
+          .toList(),
     );
   }
 }

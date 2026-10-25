@@ -218,7 +218,9 @@ class AddSheetState extends State<AddSheet> {
   List<QualityProfile>? _profiles;
   List<RootFolder>? _rootFolders;
   List<DiskSpace> _disks = [];
+  List<Language> _languages = [];
   int? _profileId;
+  Language? _language; // null = any language
   String? _rootFolder;
   bool _searchNow = true;
   bool _adding = false;
@@ -268,11 +270,16 @@ class AddSheetState extends State<AddSheet> {
       try {
         disks = await api.getDiskSpace();
       } catch (_) {} // warning is best-effort only
+      List<Language> languages = [];
+      try {
+        languages = await api.getLanguages();
+      } catch (_) {} // picker hidden if the server can't list languages
       if (!mounted) return;
       setState(() {
         _profiles = profiles;
         _rootFolders = folders;
         _disks = disks;
+        _languages = languages;
         _profileId = profiles.isNotEmpty ? profiles.first.id : null;
         _rootFolder = folders.isNotEmpty ? folders.first.path : null;
       });
@@ -304,9 +311,13 @@ class AddSheetState extends State<AddSheet> {
       _error = null;
     });
     try {
-      await widget.state.api!.add(
+      final api = widget.state.api!;
+      final profileId = _language == null
+          ? _profileId!
+          : await api.ensureLanguageProfile(_profileId!, _language!);
+      await api.add(
         item: widget.item,
-        qualityProfileId: _profileId!,
+        qualityProfileId: profileId,
         rootFolderPath: _rootFolder!,
         searchNow: _searchNow,
         monitor: _isSeries ? _monitor : null,
@@ -452,6 +463,30 @@ class AddSheetState extends State<AddSheet> {
                     .toList(),
                 onChanged: (v) => setState(() => _profileId = v),
               ),
+              if (_languages.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _language?.id ?? 0,
+                  decoration: const InputDecoration(
+                    labelText: 'Required Language',
+                    helperText:
+                        'Only grab releases in this language. Creates a '
+                        '"Profile [Language]" copy on the server on first use.',
+                    helperMaxLines: 2,
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 0, child: Text('Any')),
+                    for (final l in _languages)
+                      DropdownMenuItem(value: l.id, child: Text(l.name)),
+                  ],
+                  onChanged: (v) => setState(
+                    () => _language = _languages
+                        .where((l) => l.id == v)
+                        .firstOrNull,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _rootFolder,

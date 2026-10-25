@@ -141,6 +141,15 @@ class QualityProfile {
       QualityProfile(id: json['id'] as int, name: json['name'] as String);
 }
 
+class Language {
+  final int id;
+  final String name;
+  const Language({required this.id, required this.name});
+
+  factory Language.fromJson(Map<String, dynamic> json) =>
+      Language(id: json['id'] as int, name: json['name'] as String);
+}
+
 class RootFolder {
   final String path;
   const RootFolder({required this.path});

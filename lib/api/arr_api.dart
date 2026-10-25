@@ -139,6 +139,119 @@ class ArrApi {
         .toList();
   }
 
+  /// Real languages the server knows, A-Z. Drops the pseudo-entries
+  /// ("Any", "Original", "Unknown") which have ids <= 0.
+  Future<List<Language>> getLanguages() async {
+    final list = await _get('language') as List<dynamic>;
+    return list
+        .map((e) => Language.fromJson(e as Map<String, dynamic>))
+        .where((l) => l.id > 0)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  /// Returns the id of a quality profile that behaves like [baseProfileId]
+  /// but only accepts releases in [language], creating it on first use.
+  ///
+  /// Neither Radarr nor Sonarr v4 has a per-item language setting — language
+  /// is enforced through custom formats scored in the quality profile. So we
+  /// find-or-create a "Language: X" custom format (a required language spec)
+  /// and a copy of the base profile named "Base [X]" that scores it +10000
+  /// with the minimum/cutoff scores raised by the same amount, preserving the
+  /// base profile's own custom-format behavior on top of the language gate.
+  Future<int> ensureLanguageProfile(
+    int baseProfileId,
+    Language language,
+  ) async {
+    final profileName = await _profileNameFor(baseProfileId, language);
+    var profiles = await _get('qualityprofile') as List<dynamic>;
+    final existing = _byName(profiles, profileName);
+    if (existing != null) return existing['id'] as int;
+
+    final formatId = await _ensureLanguageFormat(language);
+    // Re-fetch: creating a custom format adds it (score 0) to every profile.
+    profiles = await _get('qualityprofile') as List<dynamic>;
+    final base = profiles.cast<Map<String, dynamic>>().firstWhere(
+      (p) => p['id'] == baseProfileId,
+    );
+
+    const bonus = 10000;
+    final profile = Map<String, dynamic>.from(base)..remove('id');
+    profile['name'] = profileName;
+    final items =
+        ((base['formatItems'] as List<dynamic>?) ?? [])
+            .map((f) => Map<String, dynamic>.from(f as Map<String, dynamic>))
+            .where((f) => f['format'] != formatId)
+            .toList()
+          ..add({
+            'format': formatId,
+            'name': 'Language: ${language.name}',
+            'score': bonus,
+          });
+    profile['formatItems'] = items;
+    profile['minFormatScore'] = (base['minFormatScore'] as int? ?? 0) + bonus;
+    profile['cutoffFormatScore'] =
+        (base['cutoffFormatScore'] as int? ?? 0) + bonus;
+    if (_isRadarr && profile.containsKey('language')) {
+      profile['language'] = {'id': language.id, 'name': language.name};
+    }
+    final created =
+        await _post('qualityprofile', profile) as Map<String, dynamic>;
+    return created['id'] as int;
+  }
+
+  /// "HD-1080p [French]" — or the base's own name if it is already the
+  /// French variant, so picking a generated profile doesn't double-suffix.
+  Future<String> _profileNameFor(int baseProfileId, Language language) async {
+    final profiles = await getQualityProfiles();
+    final base = profiles.firstWhere((p) => p.id == baseProfileId);
+    final suffix = ' [${language.name}]';
+    return base.name.endsWith(suffix) ? base.name : '${base.name}$suffix';
+  }
+
+  Future<int> _ensureLanguageFormat(Language language) async {
+    final name = 'Language: ${language.name}';
+    final List<dynamic> formats;
+    try {
+      formats = await _get('customformat') as List<dynamic>;
+    } on ArrApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw ArrApiException(
+          'Language filtering needs custom formats (Radarr v3+ / Sonarr v4+)',
+        );
+      }
+      rethrow;
+    }
+    final existing = _byName(formats, name);
+    if (existing != null) return existing['id'] as int;
+    final created =
+        await _post('customformat', {
+              'name': name,
+              'includeCustomFormatWhenRenaming': false,
+              'specifications': [
+                {
+                  'name': language.name,
+                  'implementation': 'LanguageSpecification',
+                  'negate': false,
+                  'required': true,
+                  'fields': [
+                    {'name': 'value', 'value': language.id},
+                  ],
+                },
+              ],
+            })
+            as Map<String, dynamic>;
+    return created['id'] as int;
+  }
+
+  static Map<String, dynamic>? _byName(List<dynamic> list, String name) {
+    for (final e in list) {
+      final m = e as Map<String, dynamic>;
+      if ((m['name'] as String?)?.toLowerCase() == name.toLowerCase()) return m;
+    }
+    return null;
+  }
+
   Future<List<RootFolder>> getRootFolders() async {
     final list = await _get('rootfolder') as List<dynamic>;
     return list
@@ -351,7 +464,8 @@ class ArrApi {
     // Wait (bounded) for the initial refresh to create episodes.
     var episodes = <dynamic>[];
     for (var i = 0; i < 20; i++) {
-      episodes = await _get('episode', {'seriesId': '$addedId'}) as List<dynamic>;
+      episodes =
+          await _get('episode', {'seriesId': '$addedId'}) as List<dynamic>;
       if (episodes.isNotEmpty) break;
       await Future<void>.delayed(const Duration(milliseconds: 750));
     }
@@ -359,7 +473,9 @@ class ArrApi {
     // Commit season-level monitoring on the authoritative current object.
     final current = await _get('$_mediaPath/$addedId') as Map<String, dynamic>;
     current['monitored'] = true;
-    current['seasons'] = ((current['seasons'] as List<dynamic>?) ?? []).map((s) {
+    current['seasons'] = ((current['seasons'] as List<dynamic>?) ?? []).map((
+      s,
+    ) {
       final season = Map<String, dynamic>.from(s as Map<String, dynamic>);
       season['monitored'] = wanted[season['seasonNumber'] as int] ?? false;
       return season;

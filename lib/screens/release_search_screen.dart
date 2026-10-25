@@ -30,6 +30,16 @@ class ReleaseSearchScreen extends StatefulWidget {
 class _ReleaseSearchScreenState extends State<ReleaseSearchScreen> {
   List<Release>? _releases;
   String? _error;
+  String? _language; // null = all languages
+
+  /// Languages present in the results, A-Z, for the filter menu.
+  List<String> get _availableLanguages =>
+      ({for (final r in _releases ?? <Release>[]) ...r.languages}.toList()
+        ..sort());
+
+  List<Release> get _visible => _language == null
+      ? _releases!
+      : _releases!.where((r) => r.languages.contains(_language)).toList();
 
   @override
   void initState() {
@@ -88,6 +98,24 @@ class _ReleaseSearchScreenState extends State<ReleaseSearchScreen> {
           ],
         ),
         actions: [
+          if (_availableLanguages.isNotEmpty)
+            PopupMenuButton<String>(
+              tooltip: 'Filter by language',
+              icon: Icon(
+                Icons.translate,
+                color: _language == null
+                    ? null
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              initialValue: _language ?? '',
+              onSelected: (v) =>
+                  setState(() => _language = v.isEmpty ? null : v),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: '', child: Text('All languages')),
+                for (final l in _availableLanguages)
+                  PopupMenuItem(value: l, child: Text(l)),
+              ],
+            ),
           if (_releases != null || _error != null)
             IconButton(icon: const Icon(Icons.refresh), onPressed: _search),
         ],
@@ -127,15 +155,19 @@ class _ReleaseSearchScreenState extends State<ReleaseSearchScreen> {
           if (_releases!.isEmpty) {
             return const Center(child: Text('No releases found'));
           }
+          final releases = _visible;
+          if (releases.isEmpty) {
+            return Center(child: Text('No $_language releases found'));
+          }
           return ListView.separated(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewPadding.bottom,
             ),
-            itemCount: _releases!.length,
+            itemCount: releases.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) => _ReleaseTile(
-              release: _releases![i],
-              onGrab: () => _confirmGrab(_releases![i]),
+              release: releases[i],
+              onGrab: () => _confirmGrab(releases[i]),
             ),
           );
         },
@@ -202,6 +234,8 @@ class _ReleaseTile extends StatelessWidget {
             Text(release.sizeLabel, style: muted),
             Text(release.ageLabel, style: muted),
             Text(release.indexer, style: muted),
+            if (release.languages.isNotEmpty)
+              Text(release.languages.join(', '), style: muted),
             if (release.isTorrent)
               Text(
                 'S:${release.seeders ?? "?"} L:${release.leechers ?? "?"}',
